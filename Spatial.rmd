@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Install and load the following packages: {raster}, {rgdal}, {lidR}, {tmap}, {devtools}, {rayshader}
+Install and load the following packages: {raster}, {rgdal}, {leaflet}, {devtools}, {rayshader}
 
 for rayshader: devtools::install_github("tylermorganwall/rayshader")
 
@@ -47,11 +47,14 @@ https://github.com/ajlocker/ADA-SpatialAnalysis/blob/master/ATXLiDAR/demTIN.tif
 
 https://github.com/ajlocker/ADA-SpatialAnalysis/blob/master/ATXLiDAR/hsTIN.tif
 
+https://github.com/ajlocker/ADA-SpatialAnalysis/blob/master/ATXLiDAR/demlocal.tif
+
+
 Next, we are going to load in the data by assigning them to be rasters. The DEM file is a Digital Elevation Model, which tells R elevation values from the scanned LiDAR data. The hs file is a Hillslope image.  
 
 ```{r}
 # assign raster to object
-dem <- raster("C:/Users/ajlocker/Desktop/R Geospatial/ATX/demTIN")
+dem <- raster("C:/Users/ajlocker/Desktop/R Geospatial/ATX/demTIN.tif")
 
 # view info about the raster.
 dem
@@ -77,16 +80,33 @@ hs
 plot(hs,
         col=grey(1:100/100),  # creates a gray scale coloring for the hillshade data
         legend=FALSE,         # removes any legend
-        main="LiDAR Survey UT Campus", #sets the title of the image
-        axes=FALSE)           # removes any axes titles to keep the image looking clean
+        main="LiDAR Survey Austin, Tx", #sets the title of the image
+        axes=FALSE)          # removes any axes titles to keep the image looking clean
 
-#then plot the CHM ontop of the hillshade
+#then plot the DEM ontop of the hillshade
 plot(dem, 
         axes=FALSE,
         alpha=0.5,   # transparency of the object (0=transparent, 1=not transparent)
         add=T)  # add=TRUE (or T); this will add the chm plot on top of the plot we coded immediately above
 ```
 
+#Creating an Interactive Map
+
+We're going to use the {leaflet} package to plot our lidar data onto an existing map. We can then zoom in and out to see where our data are geographically. 
+
+
+```{r}
+library(leaflet)
+hs <- raster("C:/Users/ajlocker/Desktop/R Geospatial/ATX/hsTIN.tif")
+pal <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(hs),
+  na.color = "transparent")
+
+leaflet() %>% addTiles() %>%
+  addRasterImage(hs, colors = pal, opacity = 0.8) %>%
+  addLegend(pal = pal, values = values(hs),
+    title = "Elevation")
+```
+`
 #Creating 3D Maps
 There is a great package called Rayshader, where you can mainpulate raster images in some really cool ways. 
 
@@ -96,36 +116,40 @@ library(devtools)
 devtools::install_github("tylermorganwall/rayshader")
 ```
 
-We're going to use the same raster file we used to create the last map. 
+We're going to use a raster file of just elevation points to generate this map. 
 
 ```{r}
 library(rayshader)
 
-#First, we need convert our raster to a matrix:
-utmat = matrix(raster::extract(hs,raster::extent(hs),buffer=1000),
-               nrow=ncol(hs),ncol=nrow(hs))
+#First pull in the data. 
+demlocal <- raster::raster("C:/Users/ajlocker/Desktop/R Geospatial/ATX/demtin.tif") 
 
-#Then we are going to add some texture using rayshader's built-in textures:
-utmat %>%
-  sphere_shade(texture="imhof2") %>%
+#Next, we need convert our raster to a matrix:
+atxmat = matrix(raster::extract(demlocal,raster::extent(demlocal),buffer=1000),
+               nrow=ncol(demlocal),ncol=nrow(demlocal))
+
+#Then we are going to plot with a slight shadow
+atxmat %>%
+  sphere_shade(texture = "bw") %>%
+  add_shadow(ray_shade(atxmat,lambert = TRUE), 0.7) %>%
     plot_map()
 ```
 
 ```{r}
 #adds ambient shading to the map
-ambmat = ambient_shade(utmat)
+ambmat = ambient_shade(atxmat)
 
 #This will generate a 3D interactive map
-utmat %>%
-  sphere_shade(texture = "unicorn") %>%
-  add_water(detect_water(utmat), color="unicorn") %>%
-  add_shadow(ray_shade(utmat,zscale=3,maxsearch = 300),0.5) %>%
+atxmat %>%
+  sphere_shade(texture = "bw") %>%
+  add_water(detect_water(atxmat), color="bw") %>%
+  add_shadow(ray_shade(atxmat,zscale=3,maxsearch = 300),0.5) %>%
   add_shadow(ambmat,0.5) %>%
-  plot_3d(utmat,zscale=10,fov=0,theta=135,zoom=0.75,phi=45, windowsize = c(1000,800))
+  plot_3d(atxmat,zscale=10,fov=0,theta=135,zoom=0.75,phi=45, windowsize = c(1000,800))
 render_snapshot()
 ```
 
-
+You could then take this 3D generated plot and print it on a 3D printer using the command save_3dprint("atx.stl")
 
 
 
